@@ -1,0 +1,9 @@
+pika
+requests
+fastapi
+uvicorn
+langchain
+langchain-community
+langchain-text-splitters
+pypdf
+

@@ -1,0 +1,27 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: omni-knowledge
+  cloud:
+    discovery:
+      enabled: true
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+  datasource:
+    url: jdbc:mysql://localhost:3307/omni_agent_db?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&allowPublicKeyRetrieval=true&useSSL=false
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: root
+    password: root
+  rabbitmq:
+    host: localhost
+    port: 5672
+
+omni:
+  upload:
+    dir: uploads
+  rabbitmq:
+    doc-process-exchange: doc.process.exchange
+    doc-process-routing-key: doc.process.base

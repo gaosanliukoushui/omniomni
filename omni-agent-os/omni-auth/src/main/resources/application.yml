@@ -1,0 +1,12 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: omni-auth
+  cloud:
+    discovery:
+      enabled: true
+    nacos:
+      discovery:
+        server-addr: localhost:8848

@@ -1,0 +1,12 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: omni-gateway
+  cloud:
+    discovery:
+      enabled: true
+    nacos:
+      discovery:
+        server-addr: localhost:8848
