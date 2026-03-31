@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-background text-slate-200 font-body antialiased overflow-hidden;
+    background-image:
+      radial-gradient(circle at 50% 0%, rgba(0, 229, 255, 0.05) 0%, transparent 50%),
+      radial-gradient(circle at 100% 100%, rgba(176, 38, 255, 0.05) 0%, transparent 50%);
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply bg-surface backdrop-blur-lg border border-primary/15;
+  }
+
+  .scanline {
+    background: linear-gradient(to bottom, transparent 50%, rgba(0, 229, 255, 0.02) 50%);
+    background-size: 100% 4px;
+    pointer-events: none;
+  }
+
+  .glow-text-primary {
+    text-shadow: 0 0 8px rgba(0, 229, 255, 0.6);
+  }
+
+  .glow-primary {
+    box-shadow: 0 0 15px rgba(0, 229, 255, 0.2);
+  }
+
+  .glow-secondary {
+    box-shadow: 0 0 15px rgba(0, 255, 163, 0.3);
+  }
+
+  .glow-purple {
+    box-shadow: 0 0 15px rgba(176, 38, 255, 0.3);
+  }
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1c2025;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #00E5FF;
+}
+
+@keyframes flow {
+  from {
+    stroke-dashoffset: 100;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-flow {
+  stroke-dasharray: 10;
+  animation: flow 2s linear infinite;
+}
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 4s linear infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
