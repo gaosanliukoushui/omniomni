@@ -25,7 +25,7 @@ import java.nio.file.Paths;
 public class KbDocumentServiceImpl extends ServiceImpl<KbDocumentMapper, KbDocument>
         implements KbDocumentService {
 
-    @Value("${omni.upload.dir:uploads}")
+    @Value("${omni.upload.dir:E:\\我的项目\\crouse\\omni-agent-os\\uploads}")
     private String uploadDir;
 
     private final KbDocumentMapper kbDocumentMapper;
@@ -99,7 +99,8 @@ public class KbDocumentServiceImpl extends ServiceImpl<KbDocumentMapper, KbDocum
         String docId = String.valueOf(doc.getId());
 
         // 插入成功后再通知后续处理
-        FileProcessMessage message = new FileProcessMessage(docId, doc.getFilePath(), userId);
+        // MQ 消息传递文件的完整绝对路径，供下游 AI 服务直接访问
+        FileProcessMessage message = new FileProcessMessage(docId, savePath.toAbsolutePath().toString(), userId);
         rabbitTemplate.convertAndSend("doc.process.exchange", "doc.process.base", message);
         return docId;
     }
