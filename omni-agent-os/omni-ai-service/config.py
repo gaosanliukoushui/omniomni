@@ -19,15 +19,25 @@ class Config:
 
     # RabbitMQ 配置
     MQ_HOST = os.getenv("MQ_HOST", "localhost")
-    MQ_QUEUE = os.getenv("MQ_QUEUE", "doc.process.queue")
-    MQ_EXCHANGE = os.getenv("MQ_EXCHANGE", "doc.process.exchange")
-    MQ_ROUTING_KEY = os.getenv("MQ_ROUTING_KEY", "doc.process.base")
     MQ_PORT = _get_int("MQ_PORT", 5672)
     MQ_USERNAME = os.getenv("MQ_USERNAME", "")
     MQ_PASSWORD = os.getenv("MQ_PASSWORD", "")
+    MQ_EXCHANGE = os.getenv("MQ_EXCHANGE", "doc.process.exchange")
+    MQ_QUEUE = os.getenv("MQ_QUEUE", "doc.process.queue")
+    MQ_ROUTING_KEY = os.getenv("MQ_ROUTING_KEY", "doc.process.base")
+    # Dead Letter Queue 配置
+    MQ_DLQ_EXCHANGE = os.getenv("MQ_DLQ_EXCHANGE", "doc.process.dlx")
+    MQ_DLQ_QUEUE = os.getenv("MQ_DLQ_QUEUE", "doc.process.dlq")
+    MQ_DLQ_ROUTING_KEY = os.getenv("MQ_DLQ_ROUTING_KEY", "doc.process.failed")
 
-    # 大模型配置（预留）
+    # 大模型配置
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "your-key-here")
+    OPENAI_API_BASE = os.getenv("OPENAI_API_BASE", "https://api.deepseek.com")
+    LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "deepseek-chat")
+
+    # 向量库配置
+    VECTOR_DB_DIR = os.getenv("VECTOR_DB_DIR", "vector_db")
+    EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
 
     # File
     UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
@@ -60,6 +70,11 @@ RABBIT_PORT = Config.MQ_PORT
 RABBIT_USERNAME = Config.MQ_USERNAME
 RABBIT_PASSWORD = Config.MQ_PASSWORD
 
+# Dead Letter Queue
+DOC_DLX_EXCHANGE = Config.MQ_DLQ_EXCHANGE
+DOC_DLQ_QUEUE = Config.MQ_DLQ_QUEUE
+DOC_DLQ_ROUTING_KEY = Config.MQ_DLQ_ROUTING_KEY
+
 STATUS_ENDPOINT = Config.STATUS_ENDPOINT
 
 UPLOAD_DIR = Config.UPLOAD_DIR
@@ -68,4 +83,8 @@ CHUNK_OVERLAP = Config.CHUNK_OVERLAP
 VECTORIZE_SIMULATE_DELAY_SECONDS = Config.VECTORIZE_SIMULATE_DELAY_SECONDS
 HTTP_TIMEOUT_SECONDS = Config.HTTP_TIMEOUT_SECONDS
 PREFETCH_COUNT = Config.PREFETCH_COUNT
+
+# Vector DB
+VECTOR_DB_DIR = Config.VECTOR_DB_DIR
+EMBEDDING_MODEL_NAME = Config.EMBEDDING_MODEL_NAME
 

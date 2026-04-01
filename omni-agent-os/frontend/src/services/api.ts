@@ -85,26 +85,20 @@ export const pipelineApi = {
 
 // ==================== 对话 API ====================
 export const chatApi = {
-  send: async (message: string, context?: string[]): Promise<Message> => {
-    const res = await apiClient.post<ApiResponse<Message>>('/chat', { message, context });
+  send: async (query: string, kbId?: string): Promise<{ answer: string; sources: string[] }> => {
+    const res = await apiClient.post<ApiResponse<{ answer: string; sources: string[] }>>('/ai/chat', {
+      query,
+      kbId,
+    });
     return res.data.data;
   },
 
-  stream: (message: string, onChunk: (text: string) => void, onEnd: () => void) => {
-    return apiClient.post(
-      '/chat/stream',
-      { message },
-      { responseType: 'stream' }
-    );
-  },
-
-  history: async (limit = 50): Promise<Message[]> => {
-    const res = await apiClient.get<ApiResponse<Message[]>>('/chat/history', { params: { limit } });
-    return res.data.data;
-  },
-
-  clear: async (): Promise<void> => {
-    await apiClient.post('/chat/clear');
+  streamSend: (query: string, kbId?: string): Promise<Response> => {
+    return fetch(`${API_BASE_URL}/ai/chat/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, kbId }),
+    });
   },
 };
 

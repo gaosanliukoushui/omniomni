@@ -11,8 +11,9 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useChatStore, useKnowledgeStore, useAppStore } from '@/stores';
+import { useChatStore, useKnowledgeStore } from '@/stores';
 import type { Message, KnowledgeItem } from '@/types';
+import { chatApi } from '@/services/api';
 
 const INITIAL_MESSAGES: Message[] = [
   {
@@ -104,19 +105,72 @@ export default function Console() {
     setIsLoading(true);
     setStreaming(true);
 
-    // Simulate AI response
-    setTimeout(() => {
+    try {
+      const response = await chatApi.streamSend(currentInput, undefined);
+
+      if (!response.ok || !response.body) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullAnswer = '';
+
       const agentMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'agent',
-        content: `Processing query: "${currentInput}"\n\nSearching knowledge base for relevant context...\n\nFound 2 matching documents. Generating response based on retrieved context.`,
+        content: '',
         timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
-        tokens: Math.floor(Math.random() * 500) + 100,
+        citations: [],
       };
       addMessage(agentMessage);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        for (const line of chunk.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data: ')) continue;
+          const data = trimmed.slice(6);
+          if (data === '[DONE]') break;
+
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.answer) {
+              fullAnswer = parsed.answer;
+              agentMessage.content = fullAnswer;
+              agentMessage.citations = (parsed.sources || []).map((source: string, idx: number) => ({
+                docId: String(idx + 1),
+                docName: source,
+                chunkId: `chunk-${idx + 1}`,
+                score: 0,
+                preview: '',
+              }));
+              // Trigger re-render by replacing last message
+              useChatStore.setState((state) => ({
+                messages: [...state.messages.slice(0, -1), { ...agentMessage }],
+              }));
+            }
+          } catch {
+            // ignore parse errors for partial chunks
+          }
+        }
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      const agentMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'agent',
+        content: `Request failed: ${errorMsg}`,
+        timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
+      };
+      addMessage(agentMessage);
+    } finally {
       setIsLoading(false);
       setStreaming(false);
-    }, 1500);
+    }
   }, [inputValue, isStreaming, addMessage, setInputValue, setStreaming]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

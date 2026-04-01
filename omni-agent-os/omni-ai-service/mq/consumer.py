@@ -11,6 +11,9 @@ from typing import Any, Dict, Optional
 import pika
 
 from config import (
+    DOC_DLQ_QUEUE,
+    DOC_DLQ_ROUTING_KEY,
+    DOC_DLX_EXCHANGE,
     DOC_PROCESS_EXCHANGE,
     DOC_PROCESS_QUEUE,
     DOC_PROCESS_ROUTING_KEY,
@@ -55,6 +58,20 @@ def start_consumer() -> None:
     connection = pika.BlockingConnection(params)
     channel = connection.channel()
 
+    # Declare Dead Letter Exchange and DLQ first
+    channel.exchange_declare(
+        exchange=DOC_DLX_EXCHANGE,
+        exchange_type="topic",
+        durable=True,
+    )
+    channel.queue_declare(queue=DOC_DLQ_QUEUE, durable=True)
+    channel.queue_bind(
+        queue=DOC_DLQ_QUEUE,
+        exchange=DOC_DLX_EXCHANGE,
+        routing_key=DOC_DLQ_ROUTING_KEY,
+    )
+
+    # Declare main exchange and queue
     channel.exchange_declare(
         exchange=DOC_PROCESS_EXCHANGE,
         exchange_type="topic",
@@ -77,9 +94,27 @@ def start_consumer() -> None:
         channel.basic_ack(delivery_tag=delivery_tag)
 
     def _nack_message(delivery_tag: int) -> None:
+        # Reject and route to DLQ instead of requeue
         channel.basic_nack(delivery_tag=delivery_tag, requeue=False)
 
-    def _process_async(payload: Dict[str, Any], doc_id: Any, delivery_tag: int) -> None:
+    def _send_to_dlq(body: bytes, doc_id: Any, error_msg: str) -> None:
+        # Publish failed message to DLX exchange
+        headers = {
+            "x-doc-id": str(doc_id) if doc_id is not None else "unknown",
+            "x-error": error_msg[:512] if error_msg else "unknown error",
+        }
+        channel.basic_publish(
+            exchange=DOC_DLX_EXCHANGE,
+            routing_key=DOC_DLQ_ROUTING_KEY,
+            body=body,
+            properties=pika.BasicProperties(
+                delivery_mode=2,  # persistent
+                headers=headers,
+            ),
+        )
+        print(f"[DLQ] Message sent to DLQ docId={doc_id}, reason={error_msg[:200]}")
+
+    def _process_async(payload: Dict[str, Any], doc_id: Any, delivery_tag: int, body: bytes) -> None:
         try:
             print(f"[INFO] Start processing docId={doc_id}")
             process_payload(payload)
@@ -91,6 +126,7 @@ def start_consumer() -> None:
                 f"[ERROR] Processing failed docId={doc_id}\n{err}",
                 file=sys.stderr,
             )
+            _send_to_dlq(body, doc_id, err)
             connection.add_callback_threadsafe(partial(_nack_message, delivery_tag))
 
     def on_message(_channel, method, properties, body: bytes) -> None:
@@ -107,13 +143,14 @@ def start_consumer() -> None:
             if file_path is None:
                 raise ValueError("Missing filePath in message payload")
 
-            executor.submit(_process_async, payload, doc_id, delivery_tag)
+            executor.submit(_process_async, payload, doc_id, delivery_tag, body)
         except Exception as e:
             err = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
             print(
                 f"[ERROR] Failed to parse/dispatch message docId={doc_id}\n{err}",
                 file=sys.stderr,
             )
+            _send_to_dlq(body, doc_id, err)
             _nack_message(delivery_tag)
 
     channel.basic_consume(queue=DOC_PROCESS_QUEUE, on_message_callback=on_message)

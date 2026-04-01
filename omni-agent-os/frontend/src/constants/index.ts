@@ -12,7 +12,7 @@ export const HEADER_NAV = [
   { id: 'config', label: 'Config' },
 ] as const;
 
-export const API_BASE_URL = '/api';
+export const API_BASE_URL = import.meta.env.VITE_OMNI_AI_SERVICE_URL || 'http://localhost:8003';
 
 export const LLM_MODELS = [
   { value: 'claude-3-opus', label: 'Claude 3 Opus [200k ctx]', provider: 'Anthropic' },

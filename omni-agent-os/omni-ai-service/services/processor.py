@@ -3,13 +3,13 @@ import traceback
 from typing import Any, Dict, List, Optional
 
 from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.vectorstores import Chroma
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
 
-from config import UPLOAD_DIR
+from config import UPLOAD_DIR, VECTOR_DB_DIR, EMBEDDING_MODEL_NAME
 from services.callback import update_status
-
-EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 
 
 def _safe_get(payload: Dict[str, Any], *keys: str) -> Optional[Any]:
@@ -47,24 +47,34 @@ def _extract_page_number(chunk: Any) -> int:
     return -1
 
 
-def _vectorize_with_page_number(chunks: List[Any]) -> List[Dict[str, Any]]:
-    model = SentenceTransformer(EMBEDDING_MODEL_NAME)
-    vectors: List[Dict[str, Any]] = []
+def _get_or_create_vector_db() -> Chroma:
+    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME)
+    return Chroma(persist_directory=VECTOR_DB_DIR, embedding_function=embeddings)
 
-    for chunk in chunks:
+
+def _vectorize_and_persist(
+    doc_id: Any,
+    chunks: List[Any],
+    vector_db: Chroma,
+) -> None:
+    texts = []
+    metadatas = []
+    ids = []
+
+    for idx, chunk in enumerate(chunks):
         page_number = _extract_page_number(chunk)
         text = getattr(chunk, "page_content", "")
-        embedding = model.encode(text)
+        chunk_id = f"{doc_id}_chunk_{idx}"
+        texts.append(text)
+        metadatas.append({
+            "doc_id": str(doc_id),
+            "page_number": page_number,
+            "source": getattr(chunk, "metadata", {}).get("source", ""),
+        })
+        ids.append(chunk_id)
 
-        vectors.append(
-            {
-                "page_number": page_number,
-                "embedding": embedding,
-                "text": text,
-            }
-        )
-
-    return vectors
+    vector_db.add_texts(texts=texts, metadatas=metadatas, ids=ids)
+    vector_db.persist()
 
 
 def _report_error(doc_id: Any, error: Exception) -> None:
@@ -112,8 +122,9 @@ def process_payload(payload: Dict[str, Any]) -> None:
         # 2: vectorizing callback
         update_status(doc_id, 2)
 
-        # Embedding simulation with sentence-transformers model
-        _ = _vectorize_with_page_number(chunks)
+        # Embed, persist to Chroma
+        vector_db = _get_or_create_vector_db()
+        _vectorize_and_persist(doc_id, chunks, vector_db)
 
         # 3: all succeeded
         update_status(doc_id, 3)
