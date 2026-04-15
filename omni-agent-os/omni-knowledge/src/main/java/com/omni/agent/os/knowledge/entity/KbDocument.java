@@ -42,6 +42,12 @@ public class KbDocument {
     @TableField("error_msg")
     private String errorMsg;
 
+    /**
+     * 切片数量（从向量数据库同步）
+     */
+    @TableField("chunks")
+    private Integer chunks;
+
     @TableField("update_time")
     private java.time.LocalDateTime updateTime;
 

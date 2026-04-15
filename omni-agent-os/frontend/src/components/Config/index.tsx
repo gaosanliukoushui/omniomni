@@ -2,8 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import {
   Save,
   Terminal,
-  History,
-  Code,
+  Code as CodeIcon,
   Cpu,
   Database,
   Info,
@@ -11,10 +10,16 @@ import {
   RotateCcw,
   CheckCircle2,
   AlertCircle,
+  X,
+  Clock,
+  ChevronRight,
+  History,
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useConfigStore } from '@/stores';
+import { configApi } from '@/services/api';
 import { LLM_MODELS } from '@/constants';
+import type { LLMConfigResponse } from '@/types';
 
 const DEFAULT_SYSTEM_PROMPT = `# CORE IDENTITY DEFINITION
 ROLE: You are an expert-level technical analyst operating within the Omni-Agent-OS RAG terminal.
@@ -41,11 +46,45 @@ OBJECTIVE: Synthesize retrieved knowledge into precise, zero-fluff, technically 
 BEGIN_GENERATION:`;
 
 export default function Config() {
-  const { llmConfig, systemPrompt, isDirty, setLlmConfig, setSystemPrompt, setDirty, reset } =
+  const { llmConfig, systemPrompt, setLlmConfig, setSystemPrompt, setDirty, reset } =
     useConfigStore();
   const [localPrompt, setLocalPrompt] = useState(systemPrompt || DEFAULT_SYSTEM_PROMPT);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [hasChanges, setHasChanges] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyList, setHistoryList] = useState<Array<{ version: string; timestamp: string; content: string }>>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  // 初始化时从后端加载配置
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const [llmConfigData, systemPromptData] = await Promise.all([
+          configApi.getLLM(),
+          configApi.getSystemPrompt(),
+        ]);
+        // 兼容后端返回的 Map 类型
+        if (llmConfigData) {
+          const config = llmConfigData as LLMConfigResponse;
+          setLlmConfig({
+            model: (config as Record<string, unknown>).model as string || 'qwen-plus',
+            temperature: (config as Record<string, unknown>).temperature as number || 0.85,
+            maxTokens: (config as Record<string, unknown>).maxTokens as number || 2048,
+            topK: (config as Record<string, unknown>).topK as number || 12,
+            similarityThreshold: (config as Record<string, unknown>).similarityThreshold as number || 0.78,
+            reranking: (config as Record<string, unknown>).reranking as boolean || true,
+          });
+        }
+        if (systemPromptData?.content) {
+          setSystemPrompt(systemPromptData.content);
+          setLocalPrompt(systemPromptData.content);
+        }
+      } catch (error) {
+        console.error('Failed to load config:', error);
+      }
+    };
+    loadConfig();
+  }, [setLlmConfig, setSystemPrompt]);
 
   useEffect(() => {
     if (!systemPrompt) {
@@ -115,17 +154,21 @@ export default function Config() {
   const handleSave = useCallback(async () => {
     setSaveStatus('saving');
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // 真实 API 调用
+      await Promise.all([
+        configApi.saveLLM(llmConfig as unknown as Record<string, unknown>),
+        configApi.saveSystemPrompt(systemPrompt),
+      ]);
       setSaveStatus('saved');
       setDirty(false);
       setHasChanges(false);
       setTimeout(() => setSaveStatus('idle'), 3000);
-    } catch {
+    } catch (error) {
+      console.error('Failed to save config:', error);
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 3000);
     }
-  }, [setDirty]);
+  }, [llmConfig, systemPrompt, setDirty]);
 
   const handleReset = useCallback(() => {
     if (confirm('确定要重置所有配置吗？')) {
@@ -135,6 +178,27 @@ export default function Config() {
     }
   }, [reset]);
 
+  const handleShowHistory = useCallback(async () => {
+    setShowHistory(true);
+    setIsLoadingHistory(true);
+    try {
+      const historyData = await configApi.getSystemPromptHistory();
+      setHistoryList(historyData);
+    } catch (error) {
+      console.error('Failed to load history:', error);
+      setHistoryList([]);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, []);
+
+  const handleRestoreVersion = useCallback((content: string) => {
+    setLocalPrompt(content);
+    setSystemPrompt(content);
+    setHasChanges(true);
+    setShowHistory(false);
+  }, [setSystemPrompt]);
+
   return (
     <div className="h-full flex flex-col p-8 gap-6 overflow-y-auto">
       {/* Header */}
@@ -142,7 +206,7 @@ export default function Config() {
         <div className="flex items-center gap-3">
           <Cpu size={32} className="text-primary glow-primary" />
           <h2 className="text-white tracking-widest text-2xl font-bold font-headline uppercase glow-text-primary">
-            Agent Configuration
+            智能体配置
           </h2>
         </div>
         <div className="flex items-center gap-3">
@@ -188,7 +252,7 @@ export default function Config() {
         {/* System Prompt */}
         <div className="col-span-1 lg:col-span-8 flex flex-col gap-4">
           <h3 className="text-primary text-sm font-bold tracking-[0.1em] px-2 font-headline flex items-center gap-2 uppercase">
-            <Terminal size={16} /> System Prompt
+            <Terminal size={16} /> 系统提示词
           </h3>
           <div className="glass-panel rounded-lg flex flex-col min-h-[500px] overflow-hidden border-t-2 border-t-primary/50 relative">
             <div className="flex items-center justify-between px-4 py-3 border-b border-primary/20 bg-black/40 shrink-0">
@@ -204,8 +268,28 @@ export default function Config() {
                 </span>
               </div>
               <div className="flex items-center gap-2 text-slate-500">
-                <History size={16} className="hover:text-primary cursor-pointer" title="历史版本" />
-                <Code size={16} className="hover:text-primary cursor-pointer" title="格式化" />
+                <span title="历史版本">
+                  <History
+                    size={16}
+                    className="hover:text-primary cursor-pointer"
+                    onClick={handleShowHistory}
+                  />
+                </span>
+                <span title="格式化">
+                  <CodeIcon
+                    size={16}
+                    className="hover:text-primary cursor-pointer"
+                    onClick={() => {
+                      const textarea = document.querySelector('textarea');
+                      if (textarea) {
+                        const lines = textarea.value.split('\n');
+                        const formatted = lines.map((line) => line.trimEnd()).join('\n');
+                        textarea.value = formatted;
+                        handlePromptChange({ target: textarea } as React.ChangeEvent<HTMLTextAreaElement>);
+                      }
+                    }}
+                  />
+                </span>
               </div>
             </div>
             <textarea
@@ -222,13 +306,13 @@ export default function Config() {
         <div className="col-span-1 lg:col-span-4 flex flex-col gap-6">
           {/* LLM Parameters */}
           <div className="flex flex-col gap-4">
-            <h3 className="text-primary text-sm font-bold tracking-[0.1em] px-2 font-headline flex items-center gap-2 uppercase">
-              <Cpu size={16} /> LLM Parameters
-            </h3>
+          <h3 className="text-primary text-sm font-bold tracking-[0.1em] px-2 font-headline flex items-center gap-2 uppercase">
+            <Cpu size={16} /> 大语言模型参数
+          </h3>
             <div className="glass-panel rounded-lg p-5 flex flex-col gap-5">
               <div className="flex flex-col gap-2">
                 <label className="text-[11px] font-mono text-slate-500 uppercase tracking-widest">
-                  Active Model Engine
+                  当前模型引擎
                 </label>
                 <select
                   value={llmConfig.model}
@@ -261,15 +345,15 @@ export default function Config() {
                   className="w-full accent-purple h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer"
                 />
                 <div className="flex justify-between text-[10px] font-mono text-slate-600">
-                  <span>Deterministic</span>
-                  <span>Creative</span>
+                  <span>确定性</span>
+                  <span>创造性</span>
                 </div>
               </div>
 
               <div className="flex flex-col gap-3 pt-2 border-t border-white/5">
                 <div className="flex justify-between items-center">
                   <label className="text-[11px] font-mono text-slate-500 uppercase tracking-widest">
-                    Max Output Tokens
+                    最大输出Token数
                   </label>
                   <span className="text-primary font-mono text-xs font-bold bg-primary/10 px-2 py-0.5 rounded border border-primary/30">
                     {llmConfig.maxTokens}
@@ -289,14 +373,14 @@ export default function Config() {
 
           {/* Vector Retrieval */}
           <div className="flex flex-col gap-4">
-            <h3 className="text-primary text-sm font-bold tracking-[0.1em] px-2 font-headline flex items-center gap-2 uppercase">
-              <Database size={16} /> Vector Retrieval
-            </h3>
+          <h3 className="text-primary text-sm font-bold tracking-[0.1em] px-2 font-headline flex items-center gap-2 uppercase">
+            <Database size={16} /> 向量检索
+          </h3>
             <div className="glass-panel rounded-lg p-5 flex flex-col gap-5">
               <div className="flex flex-col gap-3">
                 <div className="flex justify-between items-center">
                   <label className="text-[11px] font-mono text-slate-500 uppercase tracking-widest">
-                    Top-K Chunks
+                    Top-K 检索数
                   </label>
                   <span className="text-primary font-mono text-xs font-bold bg-primary/10 px-2 py-0.5 rounded border border-primary/30">
                     {llmConfig.topK}
@@ -315,7 +399,7 @@ export default function Config() {
               <div className="flex flex-col gap-3 pt-2 border-t border-white/5">
                 <div className="flex justify-between items-center">
                   <label className="text-[11px] font-mono text-slate-500 uppercase tracking-widest">
-                    Similarity Threshold
+                    相似度阈值
                   </label>
                   <span className="text-secondary font-mono text-xs font-bold bg-secondary/10 px-2 py-0.5 rounded border border-secondary/30">
                     {llmConfig.similarityThreshold.toFixed(2)}
@@ -336,7 +420,7 @@ export default function Config() {
                 onClick={handleRerankingToggle}
               >
                 <label className="text-[11px] font-mono text-slate-500 uppercase tracking-widest flex items-center gap-2 cursor-pointer">
-                  <SortAsc size={14} className="text-primary" /> Enable Reranking
+                  <SortAsc size={14} className="text-primary" /> 启用重排序
                 </label>
                 <div
                   className={`w-10 h-5 rounded-full relative transition-all ${
@@ -347,7 +431,7 @@ export default function Config() {
                 >
                   <div
                     className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${
-                      llmConfig.reranking ? 'right-1' : 'right-1'
+                      llmConfig.reranking ? 'right-1' : 'left-1'
                     }`}
                   />
                 </div>
@@ -356,6 +440,81 @@ export default function Config() {
           </div>
         </div>
       </div>
+
+      {/* History Modal */}
+      <AnimatePresence>
+        {showHistory && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+            onClick={() => setShowHistory(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="glass-panel rounded-lg w-[700px] max-h-[80vh] overflow-hidden border border-primary/30"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-primary/20 bg-black/40">
+                <div className="flex items-center gap-3">
+                  <Clock size={18} className="text-primary" />
+                  <h3 className="text-white font-bold font-headline uppercase tracking-wider">
+                    配置历史
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setShowHistory(false)}
+                  className="text-slate-400 hover:text-white transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-4 max-h-[60vh] overflow-y-auto">
+                {isLoadingHistory ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full" />
+                  </div>
+                ) : historyList.length > 0 ? (
+                  <div className="space-y-3">
+                    {historyList.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="p-4 rounded-md border border-primary/20 bg-black/40 hover:bg-primary/5 transition-colors"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-primary font-mono text-xs">
+                            {item.version}
+                          </span>
+                          <span className="text-slate-500 font-mono text-[10px]">
+                            {item.timestamp}
+                          </span>
+                        </div>
+                        <p className="text-slate-400 text-xs font-mono line-clamp-2 mb-3">
+                          {item.content.substring(0, 150)}...
+                        </p>
+                        <button
+                          onClick={() => handleRestoreVersion(item.content)}
+                          className="flex items-center gap-1.5 text-primary hover:text-secondary text-xs font-mono transition-colors"
+                        >
+                          <ChevronRight size={12} />
+                          恢复此版本
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center text-slate-500 py-8 font-mono text-sm">
+                    暂无历史记录
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

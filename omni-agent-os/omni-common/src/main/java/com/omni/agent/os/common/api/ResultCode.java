@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 public enum ResultCode {
 
     SUCCESS(0, "success"),
+    FAIL(1, "操作失败"),
     BAD_REQUEST(400, "bad request"),
     UNAUTHORIZED(401, "unauthorized"),
     FORBIDDEN(403, "forbidden"),

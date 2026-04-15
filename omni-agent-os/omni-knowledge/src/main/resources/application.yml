@@ -21,7 +21,7 @@ spring:
 
 omni:
   upload:
-    dir: uploads
+    dir: E:\我的项目\crouse\omni-agent-os\uploads
   rabbitmq:
     doc-process-exchange: doc.process.exchange
     doc-process-routing-key: doc.process.base

@@ -6,18 +6,20 @@ export const NAV_ITEMS = [
 ] as const;
 
 export const HEADER_NAV = [
-  { id: 'console', label: 'Console' },
-  { id: 'ingestion', label: 'Ingestion' },
-  { id: 'tracker', label: 'Holo-State' },
-  { id: 'config', label: 'Config' },
+  { id: 'console', label: '终端' },
+  { id: 'ingestion', label: '数据摄入' },
+  { id: 'tracker', label: '状态追踪' },
+  { id: 'config', label: '配置' },
 ] as const;
 
 export const API_BASE_URL = import.meta.env.VITE_OMNI_AI_SERVICE_URL || 'http://localhost:8003';
+export const JAVA_API_BASE_URL = import.meta.env.VITE_JAVA_API_URL || 'http://localhost:8082';
 
 export const LLM_MODELS = [
-  { value: 'claude-3-opus', label: 'Claude 3 Opus [200k ctx]', provider: 'Anthropic' },
-  { value: 'gpt-4-turbo', label: 'GPT-4 Turbo [128k ctx]', provider: 'OpenAI' },
-  { value: 'mixtral-8x7b', label: 'Mixtral 8x7B [32k ctx]', provider: 'Mistral' },
+  { value: 'qwen-plus', label: '通义千问 Plus [128k ctx]', provider: 'Alibaba' },
+  { value: 'qwen-max', label: '通义千问 Max [128k ctx]', provider: 'Alibaba' },
+  { value: 'deepseek-chat', label: 'DeepSeek Chat [128k ctx]', provider: 'DeepSeek' },
+  { value: 'deepseek-coder', label: 'DeepSeek Coder [32k ctx]', provider: 'DeepSeek' },
 ] as const;
 
 export const FILE_TYPES = ['PDF', 'MD', 'TXT', 'JSON', 'CSV', 'XLSX'] as const;

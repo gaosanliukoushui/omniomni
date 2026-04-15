@@ -190,14 +190,27 @@ omni-agent-os/
 
 ## 快速开始
 
+> **推荐方式**: 使用快速启动脚本，一键启动所有服务！
+
+```bash
+# Windows (PowerShell)
+.\start-dev.ps1
+
+# Linux/macOS
+chmod +x start-dev.sh && ./start-dev.sh
+```
+
+脚本会自动检查环境、启动 Docker 容器、编译 Java 项目、启动所有服务。
+
 ### 环境要求
 
-- JDK 17+
-- Node.js 18+
-- Python 3.10+
-- RabbitMQ 3.x
-- MySQL 8.0+
-- Maven 3.8+
+| 组件 | 版本要求 |
+|------|----------|
+| JDK | 17+ |
+| Node.js | 18+ |
+| Python | 3.10+ |
+| Maven | 3.8+ |
+| Docker | 20.x+ |
 
 ### 1. 安装 Python 依赖
 

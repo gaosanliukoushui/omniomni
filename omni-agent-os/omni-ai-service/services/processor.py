@@ -1,14 +1,15 @@
 import os
 import traceback
+import httpx
 from typing import Any, Dict, List, Optional
 
-from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_community.vectorstores import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from sentence_transformers import SentenceTransformer
+from langchain_core.documents import Document
 
-from config import UPLOAD_DIR, VECTOR_DB_DIR, EMBEDDING_MODEL_NAME
+from config import UPLOAD_DIR, VECTOR_DB_DIR, EMBEDDING_MODEL_NAME, JAVA_API_BASE
 from services.callback import update_status
 
 
@@ -41,7 +42,6 @@ def _extract_page_number(chunk: Any) -> int:
         return metadata["page_number"]
 
     if "page" in metadata and isinstance(metadata["page"], int):
-        # PyPDFLoader page is usually 0-based; convert to 1-based.
         return metadata["page"] + 1
 
     return -1
@@ -50,6 +50,18 @@ def _extract_page_number(chunk: Any) -> int:
 def _get_or_create_vector_db() -> Chroma:
     embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME)
     return Chroma(persist_directory=VECTOR_DB_DIR, embedding_function=embeddings)
+
+
+def _report_chunks(doc_id: Any, chunks: int) -> None:
+    """Report chunk count back to Java backend."""
+    try:
+        with httpx.Client(timeout=10) as client:
+            client.post(
+                f"{JAVA_API_BASE}/api/knowledge/doc/chunks",
+                json={"docId": str(doc_id), "chunks": chunks},
+            )
+    except Exception as e:
+        print(f"Failed to report chunks: {e}")
 
 
 def _vectorize_and_persist(
@@ -76,6 +88,8 @@ def _vectorize_and_persist(
     vector_db.add_texts(texts=texts, metadatas=metadatas, ids=ids)
     vector_db.persist()
 
+    _report_chunks(doc_id, len(chunks))
+
 
 def _report_error(doc_id: Any, error: Exception) -> None:
     err = f"{type(error).__name__}: {error}\n{traceback.format_exc()}"
@@ -83,14 +97,35 @@ def _report_error(doc_id: Any, error: Exception) -> None:
         try:
             update_status(doc_id, 4, err)
         except Exception:
-            # Avoid swallowing original processing failure due to callback failure.
             pass
+
+
+def _get_file_extension(file_path: str) -> str:
+    return os.path.splitext(file_path)[1].lower().lstrip(".")
+
+
+def _load_document(abs_path: str) -> List[Document]:
+    ext = _get_file_extension(abs_path)
+
+    if ext == "pdf":
+        try:
+            loader = PyPDFLoader(abs_path)
+            return loader.load()
+        except Exception as e:
+            raise ValueError(f"PDF load failed: {e}")
+
+    elif ext in ("txt", "md", "text"):
+        loader = TextLoader(abs_path, encoding="utf-8")
+        return loader.load()
+
+    else:
+        raise ValueError(f"Unsupported file type: {ext}")
 
 
 def process_payload(payload: Dict[str, Any]) -> None:
     doc_id = _safe_get(payload, "fileId", "docId", "id")
     file_path = _safe_get(payload, "filePath", "file_path")
-    _user_id = _safe_get(payload, "userId", "user_id")  # reserved for future use
+    _user_id = _safe_get(payload, "userId", "user_id")
 
     if doc_id is None:
         raise ValueError("Missing docId/fileId in message payload")
@@ -101,12 +136,25 @@ def process_payload(payload: Dict[str, Any]) -> None:
         # 1: parsing start callback
         update_status(doc_id, 1)
 
-        # Loader
+        # Resolve and load file
         abs_path = _resolve_file_path(str(file_path))
-        loader = PyPDFLoader(abs_path)
-        documents = loader.load()
 
-        # Chunking (fixed by requirement)
+        # Check file exists and has content
+        if not os.path.exists(abs_path):
+            raise FileNotFoundError(f"File not found: {abs_path}")
+
+        file_size = os.path.getsize(abs_path)
+        if file_size == 0:
+            raise ValueError("File is empty")
+
+        documents = _load_document(abs_path)
+
+        # Check if any content was extracted
+        total_content = " ".join(getattr(doc, "page_content", "") for doc in documents)
+        if not total_content.strip():
+            raise ValueError("No content could be extracted from the file")
+
+        # Chunking
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=500,
             chunk_overlap=50,

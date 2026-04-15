@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { subscribeWithSelector } from 'zustand/middleware';
 import type {
   PageId,
   Message,
@@ -38,12 +37,14 @@ interface ChatState {
   isStreaming: boolean;
   inputValue: string;
   tokenCost: number;
+  currentSessionId: string | null;
   addMessage: (message: Message) => void;
   setMessages: (messages: Message[]) => void;
   setStreaming: (streaming: boolean) => void;
   setInputValue: (value: string) => void;
   addTokenCost: (cost: number) => void;
   clearMessages: () => void;
+  setCurrentSessionId: (sessionId: string | null) => void;
 }
 
 export const useChatStore = create<ChatState>()((set) => ({
@@ -51,12 +52,49 @@ export const useChatStore = create<ChatState>()((set) => ({
   isStreaming: false,
   inputValue: '',
   tokenCost: 0,
+  currentSessionId: null,
   addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
   setMessages: (messages) => set({ messages }),
   setStreaming: (streaming) => set({ isStreaming: streaming }),
   setInputValue: (value) => set({ inputValue: value }),
   addTokenCost: (cost) => set((state) => ({ tokenCost: state.tokenCost + cost })),
   clearMessages: () => set({ messages: [], tokenCost: 0 }),
+  setCurrentSessionId: (sessionId) => set({ currentSessionId: sessionId }),
+}));
+
+// ==================== 对话历史状态 ====================
+interface ChatHistoryState {
+  sessions: Array<{
+    id: string;
+    title: string;
+    messageCount: number;
+    createTime?: string;
+    updateTime?: string;
+  }>;
+  isLoading: boolean;
+  searchKeyword: string;
+  setSessions: (sessions: ChatHistoryState['sessions']) => void;
+  addSession: (session: ChatHistoryState['sessions'][0]) => void;
+  updateSession: (id: string, updates: Partial<ChatHistoryState['sessions'][0]>) => void;
+  removeSession: (id: string) => void;
+  setLoading: (loading: boolean) => void;
+  setSearchKeyword: (keyword: string) => void;
+}
+
+export const useChatHistoryStore = create<ChatHistoryState>()((set) => ({
+  sessions: [],
+  isLoading: false,
+  searchKeyword: '',
+  setSessions: (sessions) => set({ sessions }),
+  addSession: (session) => set((state) => ({ sessions: [session, ...state.sessions] })),
+  updateSession: (id, updates) => set((state) => ({
+    sessions: state.sessions.map((s) => (s.id === id ? { ...s, ...updates } : s)),
+  })),
+  removeSession: (id) => set((state) => ({
+    sessions: state.sessions.filter((s) => s.id !== id),
+  })),
+  setLoading: (loading) => set({ isLoading: loading }),
+  setSearchKeyword: (keyword) => set({ searchKeyword: keyword }),
 }));
 
 // ==================== 知识库状态 ====================

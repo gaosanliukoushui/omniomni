@@ -28,4 +28,8 @@ public class Result<T> {
     public static <T> Result<T> fail(int code, String message) {
         return new Result<>(code, message, null);
     }
+
+    public static <T> Result<T> fail(String message) {
+        return new Result<>(ResultCode.FAIL.getCode(), message, null);
+    }
 }

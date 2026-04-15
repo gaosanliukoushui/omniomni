@@ -36,8 +36,9 @@ public class KbDocumentServiceImpl extends ServiceImpl<KbDocumentMapper, KbDocum
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("file is empty");
         }
+        // kbId optional, use default value 1 if not provided
         if (kbId == null) {
-            throw new IllegalArgumentException("kbId is required");
+            kbId = 1L;
         }
         if (userId == null || userId.isBlank()) {
             userId = "anonymous";

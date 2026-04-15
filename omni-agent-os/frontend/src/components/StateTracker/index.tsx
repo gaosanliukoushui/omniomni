@@ -1,16 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Share2, Database, Filter, MemoryStick, PersonStanding, X, Copy, Activity, ChevronRight } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { systemApi } from '@/services/api';
 import type { PipelineNode, PayloadData } from '@/types';
 
 const NODES: PipelineNode[] = [
-  { id: '0', label: 'USER_INPUT', icon: 'user', color: 'primary', x: 110, y: 260 },
-  { id: '1', label: 'VECTOR_DB', icon: 'database', color: 'primary', x: 310, y: 110 },
-  { id: '2', label: 'RERANKER', icon: 'filter', color: 'primary', x: 510, y: 260 },
-  { id: '3', label: 'LLM_GENERATOR', icon: 'cpu', color: 'purple', isLarge: true, x: 710, y: 110 },
+  { id: '0', label: '用户输入', icon: 'user', color: 'primary', x: 110, y: 260 },
+  { id: '1', label: '向量数据库', icon: 'database', color: 'primary', x: 310, y: 110 },
+  { id: '2', label: '重排序器', icon: 'filter', color: 'primary', x: 510, y: 260 },
+  { id: '3', label: '大语言模型', icon: 'cpu', color: 'purple', isLarge: true, x: 710, y: 110 },
 ];
 
-const ICON_MAP: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
+const ICON_MAP: Record<string, React.ComponentType<Record<string, unknown>>> = {
   user: PersonStanding,
   database: Database,
   filter: Filter,
@@ -32,19 +33,12 @@ const SAMPLE_PAYLOAD: PayloadData = {
   ],
 };
 
-const METRICS = [
-  { label: 'Sys_Latency', value: '420ms', color: 'text-secondary' },
-  { label: 'Generation_Rate', value: '64 T/s', color: 'text-primary' },
-  { label: 'Vector_Dim', value: '1536', color: 'text-purple' },
-  { label: 'Active_Nodes', value: '4/4', color: 'text-slate-200' },
-];
-
 interface NodeProps {
   x: number;
   y: number;
   label: string;
   icon: string;
-  color: 'primary' | 'purple';
+  color: 'primary' | 'secondary' | 'purple';
   isLarge?: boolean;
   isActive?: boolean;
   onClick?: () => void;
@@ -52,7 +46,6 @@ interface NodeProps {
 
 function Node({ x, y, label, icon, color, isLarge, isActive, onClick }: NodeProps) {
   const Icon = ICON_MAP[icon];
-  const size = isLarge ? 24 : 20;
 
   return (
     <motion.div
@@ -98,7 +91,7 @@ function Node({ x, y, label, icon, color, isLarge, isActive, onClick }: NodeProp
             transition={{ duration: 1.5, repeat: Infinity }}
             className="font-mono text-[10px] text-slate-500"
           >
-            STREAMING...
+            流式生成中...
           </motion.p>
         )}
       </div>
@@ -106,14 +99,63 @@ function Node({ x, y, label, icon, color, isLarge, isActive, onClick }: NodeProp
   );
 }
 
+interface MetricItem {
+  label: string;
+  value: string;
+  color: string;
+}
+
 export default function StateTracker() {
   const [activeNode, setActiveNode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [metrics, setMetrics] = useState<MetricItem[]>([
+    { label: '系统延迟', value: '420ms', color: 'text-secondary' },
+    { label: '生成速率', value: '64 T/s', color: 'text-primary' },
+    { label: '向量维度', value: '1536', color: 'text-purple' },
+    { label: '活跃节点', value: '4/4', color: 'text-slate-200' },
+  ]);
+  const [telemetry, setTelemetry] = useState<Record<string, any>>({});
+
+  // 加载遥测数据
+  useEffect(() => {
+    const loadTelemetry = async () => {
+      try {
+        const [metricsData, telemetryData] = await Promise.all([
+          systemApi.metrics(),
+          systemApi.telemetry(),
+        ]);
+        setMetrics([
+          { label: 'Sys_Latency', value: `${metricsData.latency || 0}ms`, color: 'text-secondary' },
+          { label: 'Generation_Rate', value: `${telemetryData.tokenRate || 0} T/s`, color: 'text-primary' },
+          { label: 'Vector_Dim', value: `${telemetryData.vectorDim || 0}`, color: 'text-purple' },
+          { label: 'Active_Nodes', value: `${telemetryData.activeNodes || 0}/${telemetryData.totalNodes || 0}`, color: 'text-slate-200' },
+        ]);
+        setTelemetry(telemetryData);
+      } catch (error) {
+        console.error('Failed to load telemetry:', error);
+      }
+    };
+    loadTelemetry();
+    // 定时刷新
+    const interval = setInterval(loadTelemetry, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(JSON.stringify(SAMPLE_PAYLOAD, null, 2));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleStepForward = () => {
+    const currentIndex = activeNode ? NODES.findIndex((n) => n.id === activeNode) : -1;
+    const nextIndex = Math.min(currentIndex + 1, NODES.length - 1);
+    setActiveNode(NODES[nextIndex].id);
+  };
+
+  const handleReset = () => {
+    setActiveNode(null);
+    setCopied(false);
   };
 
   return (
@@ -126,10 +168,10 @@ export default function StateTracker() {
       >
         <h3 className="font-display font-bold text-sm text-primary uppercase tracking-widest mb-4 flex items-center gap-2">
           <Activity size={16} />
-          Live Telemetry
+          实时遥测
         </h3>
         <div className="space-y-4 font-mono text-sm">
-          {METRICS.map((stat, idx) => (
+          {metrics.map((stat, idx) => (
             <motion.div
               key={stat.label}
               initial={{ x: -20, opacity: 0 }}
@@ -222,10 +264,13 @@ export default function StateTracker() {
           <div className="flex items-center gap-2">
             <Share2 size={18} className="text-primary" />
             <h3 className="font-display font-bold text-lg text-white tracking-wide uppercase">
-              Payload Inspector
+              负载检查器
             </h3>
           </div>
-          <button className="text-slate-500 hover:text-white transition-colors">
+          <button
+            className="text-slate-500 hover:text-white transition-colors"
+            onClick={() => setActiveNode(null)}
+          >
             <X size={20} />
           </button>
         </div>
@@ -234,10 +279,10 @@ export default function StateTracker() {
           {/* Meta Grid */}
           <div className="grid grid-cols-2 gap-4">
             {[
-              { label: 'SOURCE_NODE', value: activeNode ? NODES.find((n) => n.id === activeNode)?.label : 'Vector Retrieval', color: 'text-primary' },
-              { label: 'TARGET_NODE', value: 'Context Assembly', color: 'text-purple' },
-              { label: 'PAYLOAD_SIZE', value: '1.2 KB', color: 'text-white' },
-              { label: 'STATUS', value: '200 OK', color: 'text-secondary' },
+              { label: '源节点', value: activeNode ? NODES.find((n) => n.id === activeNode)?.label : '向量检索', color: 'text-primary' },
+              { label: '目标节点', value: '上下文组装', color: 'text-purple' },
+              { label: '负载大小', value: '1.2 KB', color: 'text-white' },
+              { label: '状态', value: telemetry.modelStatus || '200 OK', color: 'text-secondary' },
             ].map((meta, idx) => (
               <motion.div
                 key={meta.label}
@@ -271,12 +316,18 @@ export default function StateTracker() {
 
           {/* Quick Actions */}
           <div className="flex gap-2 shrink-0">
-            <button className="flex-1 py-2 bg-primary/10 border border-primary/30 text-primary text-xs font-mono uppercase hover:bg-primary/20 transition-colors flex items-center justify-center gap-2">
+            <button
+              onClick={handleStepForward}
+              className="flex-1 py-2 bg-primary/10 border border-primary/30 text-primary text-xs font-mono uppercase hover:bg-primary/20 transition-colors flex items-center justify-center gap-2"
+            >
               <ChevronRight size={12} />
-              Step Forward
+              下一步
             </button>
-            <button className="flex-1 py-2 bg-slate-800/50 border border-primary/10 text-slate-400 text-xs font-mono uppercase hover:bg-slate-800 transition-colors flex items-center justify-center gap-2">
-              Reset
+            <button
+              onClick={handleReset}
+              className="flex-1 py-2 bg-slate-800/50 border border-primary/10 text-slate-400 text-xs font-mono uppercase hover:bg-slate-800 transition-colors flex items-center justify-center gap-2"
+            >
+              重置
             </button>
           </div>
         </div>

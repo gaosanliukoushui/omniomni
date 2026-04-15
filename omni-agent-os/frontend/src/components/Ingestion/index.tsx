@@ -1,60 +1,18 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   CloudUpload,
-  Database,
   Terminal,
-  AlertTriangle,
   CheckCircle2,
   Clock,
   RefreshCw,
   Trash2,
-  X,
   FileText,
+  AlertTriangle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { usePipelineStore } from '@/stores';
+import { pipelineApi, knowledgeApi } from '@/services/api';
 import { FILE_TYPES, MAX_FILE_SIZE } from '@/constants';
-import type { PipelineItem, PipelineStatus } from '@/types';
-
-const INITIAL_PIPELINE: PipelineItem[] = [
-  {
-    id: '1',
-    name: 'CORE_PROTOCOL_ALPHA.PDF',
-    chunks: '1,248',
-    tokens: '842.1K',
-    vectors: '1,248',
-    status: 'synced',
-    progress: 100,
-  },
-  {
-    id: '2',
-    name: 'NEURAL_NET_SPECS_V2.MD',
-    chunks: '421',
-    tokens: '128.5K',
-    vectors: '380',
-    status: 'vectorizing',
-    progress: 78,
-  },
-  {
-    id: '3',
-    name: 'USER_BEHAVIOR_LOGS.JSON',
-    chunks: '8,902',
-    tokens: '1.2M',
-    vectors: '0',
-    status: 'queued',
-    progress: 5,
-  },
-  {
-    id: '4',
-    name: 'FINANCIAL_PROJECTIONS.XLSX',
-    chunks: '--',
-    tokens: '--',
-    vectors: '--',
-    status: 'error',
-    progress: 0,
-    errorMessage: 'Invalid file format detected',
-  },
-];
+import type { PipelineItem, PipelineStatus, LogEntry } from '@/types';
 
 const LOG_TYPES = {
   info: { color: 'text-secondary', prefix: '[INFO]' },
@@ -63,31 +21,64 @@ const LOG_TYPES = {
   error: { color: 'text-error', prefix: '[ERR]' },
 };
 
-const INITIAL_LOGS = [
-  { type: 'info', content: 'Initializing ingestion matrix...', active: false },
-  { type: 'info', content: 'Connection established with Pinecone Cluster-01', active: false },
-  { type: 'proc', content: 'Sharding NEURAL_NET_SPECS_V2.MD...', active: false },
-  { type: 'proc', content: 'Chunking sequence 1-42 complete.', active: false },
-  { type: 'info', content: 'Chunk 42 embedded. Vector dim: 1536', active: false },
-  { type: 'info', content: 'Chunk 43 embedded. Vector dim: 1536', active: false },
-  { type: 'warn', content: 'Rate limit approaching on OpenAI API. Throttling...', active: false },
-  { type: 'proc', content: 'Upserting vectors to namespace: "production-v4"', active: false },
-  { type: 'info', content: 'Chunk 44 embedded. Vector dim: 1536', active: false },
-  { type: 'info', content: 'System stabilizing', active: true },
+const INITIAL_LOGS: LogEntry[] = [
+  { type: 'info', content: '正在初始化摄入矩阵...', active: false },
+  { type: 'info', content: '已建立与向量数据库集群01的连接', active: false },
+  { type: 'proc', content: '正在分片 NEURAL_NET_SPECS_V2.MD...', active: false },
+  { type: 'proc', content: '分片序列 1-42 已完成。', active: false },
+  { type: 'info', content: '块 42 已嵌入。向量维度: 1536', active: false },
+  { type: 'info', content: '块 43 已嵌入。向量维度: 1536', active: false },
+  { type: 'warn', content: '接近OpenAI API速率限制。正在节流...', active: false },
+  { type: 'proc', content: '正在上传向量到命名空间: "production-v4"', active: false },
+  { type: 'info', content: '块 44 已嵌入。向量维度: 1536', active: false },
+  { type: 'info', content: '系统正在稳定中', active: true },
 ];
-
-interface LogEntry {
-  type: 'info' | 'proc' | 'warn' | 'error';
-  content: string;
-  active?: boolean;
-}
 
 export default function Ingestion() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>(INITIAL_LOGS);
-  const [selectedFiles, setSelectedFiles] = useState<PipelineItem[]>([]);
+  const [pipeline, setPipeline] = useState<PipelineItem[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+  const [systemMetrics, setSystemMetrics] = useState({ cpu: 42.1, mem: 12.8, disk: 88 });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logsEndRef = useRef<HTMLDivElement>(null);
+
+  // 加载管道数据
+  useEffect(() => {
+    const loadPipeline = async () => {
+      try {
+        const data = await pipelineApi.list();
+        setPipeline(data);
+        addLog('info', `Loaded ${data.length} pipeline items`);
+      } catch (error) {
+        console.error('Failed to load pipeline:', error);
+        addLog('error', '连接后端失败');
+      }
+    };
+    loadPipeline();
+    // 定时刷新
+    const interval = setInterval(loadPipeline, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // 加载系统指标
+  useEffect(() => {
+    const loadMetrics = async () => {
+      try {
+        await knowledgeApi.getStats();
+        setSystemMetrics({
+          cpu: 42.1,
+          mem: 12.8,
+          disk: 88,
+        });
+      } catch (error) {
+        console.error('Failed to load metrics:', error);
+      }
+    };
+    loadMetrics();
+    const interval = setInterval(loadMetrics, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   const getStatusIcon = (status: PipelineStatus) => {
     switch (status) {
@@ -156,21 +147,42 @@ export default function Ingestion() {
         progress: 0,
         uploadedAt: new Date().toISOString(),
       };
-      addLog('proc', `Processing ${newItem.name}...`);
-      simulateUpload(newItem);
+      setPipeline((prev) => [newItem, ...prev]);
+      addLog('proc', `Uploading ${newItem.name}...`);
+      uploadFile(file, newItem.id);
     });
   };
 
-  const simulateUpload = (item: PipelineItem) => {
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += Math.random() * 20;
-      if (progress >= 100) {
-        progress = 100;
-        clearInterval(interval);
-        addLog('info', `${item.name} uploaded successfully`);
-      }
-    }, 500);
+  const uploadFile = async (file: File, tempId: string) => {
+    try {
+      const docId = await knowledgeApi.upload(file, 1, (percent) => {
+        // 更新进度
+        setPipeline((prev) =>
+          prev.map((item) =>
+            item.id === tempId ? { ...item, progress: percent } : item
+          )
+        );
+      });
+      addLog('info', `${file.name.toUpperCase()} uploaded successfully`);
+      // 确保 docId 是字符串类型，后端返回的是数字
+      const docIdStr = String(docId);
+      // 更新状态为处理中
+      setPipeline((prev) =>
+        prev.map((item) =>
+          item.id === tempId
+            ? { ...item, id: docIdStr, status: 'vectorizing' as PipelineStatus, progress: 50 }
+            : item
+        )
+      );
+    } catch (error) {
+      console.error('Upload failed:', error);
+      addLog('error', `上传失败: ${(error as Error).message}`);
+      setPipeline((prev) =>
+        prev.map((item) =>
+          item.id === tempId ? { ...item, status: 'error' as PipelineStatus } : item
+        )
+      );
+    }
   };
 
   const addLog = (type: LogEntry['type'], content: string) => {
@@ -187,9 +199,26 @@ export default function Ingestion() {
     );
   };
 
-  const deleteSelected = () => {
-    setLogs((prev) => [...prev, { type: 'warn', content: `Deleted ${selectedFiles.length} file(s)` }]);
-    setSelectedFiles([]);
+  const toggleSelectAll = () => {
+    if (selectedFiles.length === pipeline.length) {
+      setSelectedFiles([]);
+    } else {
+      setSelectedFiles(pipeline.map((item) => item.id));
+    }
+  };
+
+  const deleteSelected = async () => {
+    try {
+      for (const id of selectedFiles) {
+        await pipelineApi.delete(id);
+      }
+      setPipeline((prev) => prev.filter((item) => !selectedFiles.includes(item.id)));
+      addLog('warn', `Deleted ${selectedFiles.length} file(s)`);
+      setSelectedFiles([]);
+    } catch (error) {
+      console.error('Delete failed:', error);
+      addLog('error', `Failed to delete files`);
+    }
   };
 
   return (
@@ -233,17 +262,17 @@ export default function Ingestion() {
           </motion.div>
 
           <h2 className="font-headline font-bold text-3xl text-slate-100 tracking-tighter uppercase">
-            {isDragOver ? 'DROP_FILES_NOW' : 'Initialize_Knowledge_Upload'}
+            {isDragOver ? '释放文件' : '初始化知识上传'}
           </h2>
           <p className="font-mono text-xs text-primary/60 mt-2 tracking-widest uppercase">
-            Drag_and_Drop_Raw_Data_for_Neural_Mapping
+            拖放原始数据进行神经网络映射
           </p>
 
           <div className="absolute bottom-4 right-6 flex gap-4">
             <div className="text-[10px] font-mono text-slate-500 uppercase">
-              Supported: {FILE_TYPES.join(', ')}
+              支持格式: {FILE_TYPES.join(', ')}
             </div>
-            <div className="text-[10px] font-mono text-primary uppercase">Max Vol: 512MB</div>
+            <div className="text-[10px] font-mono text-primary uppercase">最大: 512MB</div>
           </div>
         </div>
       </section>
@@ -256,7 +285,7 @@ export default function Ingestion() {
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 bg-secondary animate-pulse rounded-full" />
               <h3 className="font-headline text-xs font-bold tracking-widest uppercase text-slate-200">
-                Active_Pipeline_Monitor
+                活跃管道监控
               </h3>
             </div>
             <div className="flex gap-4 items-center">
@@ -269,7 +298,7 @@ export default function Ingestion() {
                   <span className="font-mono text-[10px]">Delete ({selectedFiles.length})</span>
                 </button>
               )}
-              <span className="font-mono text-[10px] text-slate-500 uppercase">Nodes: {INITIAL_PIPELINE.length + 1}</span>
+              <span className="font-mono text-[10px] text-slate-500 uppercase">节点数: {pipeline.length + 1}</span>
               <span className="font-mono text-[10px] text-secondary uppercase">Latency: 14ms</span>
             </div>
           </div>
@@ -279,17 +308,22 @@ export default function Ingestion() {
               <thead className="sticky top-0 bg-slate-900/95 backdrop-blur text-primary/70 border-b border-primary/10 uppercase tracking-tighter">
                 <tr>
                   <th className="px-2 py-4 w-8">
-                    <input type="checkbox" className="accent-primary" />
+                    <input
+                      type="checkbox"
+                      className="accent-primary"
+                      checked={selectedFiles.length === pipeline.length && pipeline.length > 0}
+                      onChange={toggleSelectAll}
+                    />
                   </th>
-                  <th className="px-6 py-4 font-medium">Source_Asset</th>
-                  <th className="px-4 py-4 font-medium">Chunks</th>
-                  <th className="px-4 py-4 font-medium">Tokens</th>
-                  <th className="px-4 py-4 font-medium">Vectors</th>
-                  <th className="px-6 py-4 font-medium">Status_Matrix</th>
+                  <th className="px-6 py-4 font-medium">资源</th>
+                  <th className="px-4 py-4 font-medium">块数</th>
+                  <th className="px-4 py-4 font-medium">Token数</th>
+                  <th className="px-4 py-4 font-medium">向量数</th>
+                  <th className="px-6 py-4 font-medium">状态</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-primary/5">
-                {INITIAL_PIPELINE.map((item) => (
+                {pipeline.map((item) => (
                   <tr
                     key={item.id}
                     onClick={() => toggleFileSelection(item.id)}
@@ -302,6 +336,7 @@ export default function Ingestion() {
                         type="checkbox"
                         checked={selectedFiles.includes(item.id)}
                         onChange={() => {}}
+                        onClick={(e) => e.stopPropagation()}
                         className="accent-primary"
                       />
                     </td>
@@ -348,6 +383,13 @@ export default function Ingestion() {
                     </td>
                   </tr>
                 ))}
+                {pipeline.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                      管道中暂无文档。上传文件到上方开始。
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -359,7 +401,7 @@ export default function Ingestion() {
 
           <div className="bg-slate-900/50 px-4 py-2 border-b border-primary/10 flex items-center gap-2 shrink-0">
             <Terminal size={12} className="text-secondary" />
-            <h3 className="font-mono text-[10px] uppercase font-bold text-slate-400">Live_System_Log</h3>
+            <h3 className="font-mono text-[10px] uppercase font-bold text-slate-400">实时系统日志</h3>
           </div>
 
           <div ref={logsEndRef} className="flex-1 p-4 font-mono text-[10px] leading-relaxed overflow-auto text-primary/80">
@@ -385,9 +427,9 @@ export default function Ingestion() {
 
           <div className="mt-auto border-t border-primary/10 p-2 bg-black/40 shrink-0">
             <div className="flex justify-between font-mono text-[9px] text-slate-500 px-2">
-              <span>CPU: 42.1%</span>
-              <span>MEM: 12.8GB</span>
-              <span>DISK: 88%</span>
+              <span>CPU: {systemMetrics.cpu.toFixed(1)}%</span>
+              <span>内存: {systemMetrics.mem.toFixed(1)}GB</span>
+              <span>磁盘: {systemMetrics.disk}%</span>
             </div>
           </div>
         </div>
@@ -396,7 +438,7 @@ export default function Ingestion() {
       {/* HUD Widget */}
       <div className="fixed bottom-10 right-10 pointer-events-none">
         <div className="glass-panel p-4 flex flex-col gap-2">
-          <span className="font-mono text-[10px] text-primary/60 uppercase">System_Load</span>
+          <span className="font-mono text-[10px] text-primary/60 uppercase">系统负载</span>
           <div className="flex items-end gap-1 h-8">
             {[40, 60, 30, 80, 50, 90, 45, 70].map((h, i) => (
               <motion.div

@@ -5,7 +5,7 @@ import { useAppStore, useSystemStore } from '@/stores';
 import { HEADER_NAV, NAV_ITEMS } from '@/constants';
 import type { PageId } from '@/types';
 
-const ICON_MAP: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
+const ICON_MAP: Record<string, React.ComponentType<Record<string, unknown>>> = {
   terminal: LayoutDashboard,
   database: Database,
   activity: Activity,
@@ -89,7 +89,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 ? 'hover:bg-primary/10 text-primary'
                 : 'bg-error/20 text-error'
             }`}
-            title={isConnected ? 'System Connected' : 'System Disconnected'}
+            title={isConnected ? '系统已连接' : '系统未连接'}
           >
             <Radio size={18} />
           </button>
@@ -104,9 +104,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <aside className="w-16 md:w-64 border-r border-primary/15 bg-black/40 backdrop-blur-xl flex flex-col py-4 z-30 shrink-0">
           <div className="px-6 mb-8 hidden md:block">
             <h2 className="text-secondary font-mono text-xs uppercase font-bold tracking-widest">
-              SYSTEM_CORE
+              系统核心
             </h2>
-            <p className="text-primary/40 text-[10px] font-mono">v4.0.2-ALPHA</p>
+            <p className="text-primary/40 text-[10px] font-mono">v4.0.2-测试版</p>
           </div>
 
           <nav className="flex-1 space-y-1">
@@ -143,13 +143,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 }
               }}
             >
-              REBOOT_SYSTEM
+              重启系统
             </button>
           </div>
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-hidden relative">{children}</main>
+        <main className="flex-1 overflow-y-auto overflow-x-hidden relative">{children}</main>
       </div>
 
       {/* Footer Stats */}
@@ -158,7 +158,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2">
             <span className={`w-1.5 h-1.5 ${isConnected ? 'bg-secondary animate-pulse' : 'bg-error'} rounded-full`} />
             <span className="font-mono text-[8px] text-secondary uppercase tracking-widest">
-              Live System Feed
+              实时系统状态
             </span>
           </div>
           <div className="flex items-center gap-4 font-mono text-[8px] text-primary/40">
@@ -170,7 +170,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <div className="font-mono text-[8px] text-primary/30">
-          LOCAL_IP: {metrics?.ip ?? '192.168.1.144'} | ENCRYPTION: AES-256-GCM
+          本机IP: {metrics?.ip ?? '192.168.1.144'} | 加密: AES-256-GCM
         </div>
       </footer>
     </div>

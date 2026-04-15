@@ -24,6 +24,7 @@ export interface Citation {
   chunkId: string;
   score: number;
   preview: string;
+  pageNumber?: number;
 }
 
 // ==================== 知识库 ====================
@@ -32,16 +33,21 @@ export interface KnowledgeItem {
   name: string;
   chunks: number;
   simIdx: number;
-  status: 'active' | 'processing' | 'pending' | 'error';
+  status: 'active' | 'processing' | 'pending' | 'error' | 'uploading' | 'synced' | 'vectorizing';
   uploadedAt?: string;
   size?: number;
+  errorMsg?: string;
 }
 
 export interface KnowledgeStats {
-  totalDocs: number;
-  totalChunks: number;
-  totalTokens: string;
-  avgSimilarity: number;
+  total?: number;
+  totalDocs?: number;
+  ready?: number;
+  processing?: number;
+  failed?: number;
+  totalChunks?: number;
+  totalTokens?: string;
+  avgSimilarity?: number;
 }
 
 // ==================== 数据摄取管道 ====================
@@ -61,22 +67,31 @@ export interface PipelineItem {
 
 // ==================== 系统状态 ====================
 export interface SystemMetrics {
-  cpu: number;
-  memory: number;
-  memoryTotal: number;
-  disk: number;
-  latency: number;
-  uptime: string;
-  ip: string;
-  activeConnections: number;
+  cpuUsage?: number;
+  cpu?: number;
+  memoryUsage?: number;
+  memory?: number;
+  memoryTotal?: number;
+  memoryUsed?: number;
+  diskUsage?: number;
+  disk?: number;
+  latency?: number;
+  uptime?: string;
+  ip?: string;
+  activeConnections?: number;
+  qps?: number;
 }
 
 export interface TelemetryData {
-  latency: number;
-  generationRate: string;
-  vectorDim: number;
-  activeNodes: number;
-  totalNodes: number;
+  latency?: number;
+  tokenRate?: number;
+  generationRate?: string;
+  vectorDim?: number;
+  activeNodes?: number;
+  totalNodes?: number;
+  modelStatus?: string;
+  modelName?: string;
+  queueSize?: number;
 }
 
 // ==================== 配置 ====================
@@ -89,10 +104,13 @@ export interface LLMConfig {
   reranking: boolean;
 }
 
+// 支持 Map 或 LLMConfig 类型
+export type LLMConfigResponse = LLMConfig | Record<string, unknown>;
+
 export interface SystemPrompt {
   content: string;
-  version: string;
-  updatedAt: string;
+  version?: string;
+  updatedAt?: string;
 }
 
 // ==================== API 响应 ====================
@@ -121,8 +139,16 @@ export interface PayloadData {
   action: string;
   parameters: Record<string, unknown>;
   results: Array<{
-    chunkId: string;
+    chunk_id?: string;
+    chunkId?: string;
     score: number;
     preview: string;
   }>;
+}
+
+// ==================== 日志条目 ====================
+export interface LogEntry {
+  type: 'info' | 'proc' | 'warn' | 'error';
+  content: string;
+  active?: boolean;
 }
